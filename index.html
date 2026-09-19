@@ -243,46 +243,6 @@
     cursor: pointer;
   }
 
-  .pdf-modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: #fff;
-    z-index: 1000;
-    flex-direction: column;
-  }
-  .pdf-modal.open { display: flex; }
-  .pdf-modal-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 14px;
-    padding-top: calc(12px + env(safe-area-inset-top, 0px));
-    background: var(--navy);
-    color: #fff;
-    flex-shrink: 0;
-  }
-  .pdf-modal-title {
-    font-weight: 700;
-    font-size: 14px;
-  }
-  .pdf-modal-actions { display: flex; gap: 8px; }
-  .pdf-modal-actions button {
-    border: none;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: 700;
-    font-family: inherit;
-    cursor: pointer;
-  }
-  #pdfSaveBtn { background: var(--gold); color: #fff; }
-  #pdfCloseBtn { background: rgba(255,255,255,0.15); color: #fff; }
-  #pdfFrame {
-    flex: 1;
-    border: none;
-    width: 100%;
-  }
 </style>
 <script>
 /* jsPDF (bundled inline for offline/in-app-browser reliability) */
@@ -714,22 +674,11 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   </div>
 
   <button class="export-btn" id="exportBtn">Export to PDF</button>
-  <div class="export-hint" id="exportHint">Opens the PDF summary right here — use Save / Share from there to send it on.</div>
+  <div class="export-hint" id="exportHint">Opens your phone's Share menu with the PDF ready to save or send.</div>
 
   <button class="new-week-btn" id="newWeekBtn">Start New Week (clears saved entries)</button>
-  <div style="text-align:center; font-size:10px; color:#bbb; padding:10px 0 20px;">build 2026-09-19-r10-v3</div>
+  <div style="text-align:center; font-size:10px; color:#bbb; padding:10px 0 20px;">build 2026-09-19-r11-direct-share</div>
 
-</div>
-
-<div class="pdf-modal" id="pdfModal">
-  <div class="pdf-modal-bar">
-    <span class="pdf-modal-title">Weekly Payroll PDF</span>
-    <div class="pdf-modal-actions">
-      <button type="button" id="pdfSaveBtn">Save / Share</button>
-      <button type="button" id="pdfCloseBtn">Close</button>
-    </div>
-  </div>
-  <iframe id="pdfFrame" title="Weekly payroll PDF preview"></iframe>
 </div>
 
 <template id="cardTemplate">
@@ -983,18 +932,33 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       var blob = doc.output('blob');
       var safeWeek = weekVal.replace(/[^0-9A-Za-z-]/g, '') || 'week';
       var filename = 'JMP-Invoice-' + safeWeek + '.pdf';
-      var url = URL.createObjectURL(blob);
 
-      // Show the PDF immediately, inline in this same page — this avoids the
-      // browser/OS restriction that silently blocks navigating a *new* window
-      // or tab to a blob: URL. Saving/sharing is offered as a separate action
-      // inside the preview, not attempted automatically.
-      currentPdfUrl = url;
-      currentPdfBlob = blob;
-      currentPdfFilename = filename;
-      var frame = document.getElementById('pdfFrame');
-      frame.src = url;
-      document.getElementById('pdfModal').classList.add('open');
+      // Go straight to the OS's native Share Sheet (iOS/Android) with the actual
+      // file — no in-page preview step, since browsers render blob-PDF previews
+      // inconsistently (some show a real preview, some just show a generic
+      // placeholder). The Share Sheet itself shows the file and lets the user
+      // save it, message it, AirDrop it, or email it directly.
+      var file = new File([blob], filename, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: filename });
+          return;
+        } catch (shareErr) {
+          if (shareErr && shareErr.name === 'AbortError') { return; } // user cancelled
+          // fall through to plain download on any other failure
+        }
+      }
+
+      // Fallback (desktop browsers without file-share support): plain download.
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
     } catch (e) {
       var msg = (e && e.message) ? e.message : String(e);
       hint.textContent = 'PDF export failed: ' + msg;
@@ -1003,61 +967,6 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       exportBtn.textContent = originalLabel;
     }
   }
-
-  var currentPdfUrl = null;
-  var currentPdfBlob = null;
-  var currentPdfFilename = 'JMP-Invoice.pdf';
-
-  function closePdfModal() {
-    document.getElementById('pdfModal').classList.remove('open');
-    document.getElementById('pdfFrame').src = 'about:blank';
-    if (currentPdfUrl) {
-      setTimeout(function (urlToRevoke) {
-        return function () { URL.revokeObjectURL(urlToRevoke); };
-      }(currentPdfUrl), 1000);
-      currentPdfUrl = null;
-    }
-  }
-
-  document.getElementById('pdfCloseBtn').addEventListener('click', closePdfModal);
-
-  document.getElementById('pdfSaveBtn').addEventListener('click', async function () {
-    if (!currentPdfBlob) return;
-    var saveBtn = document.getElementById('pdfSaveBtn');
-    var originalSaveLabel = saveBtn.textContent;
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving…';
-
-    try {
-      var file = new File([currentPdfBlob], currentPdfFilename, { type: 'application/pdf' });
-
-      // Primary (iOS/Android): hand the file to the OS's native Share Sheet, which
-      // offers Save to Files, Messages, AirDrop, Mail, etc. This is the only reliable
-      // way to save a PDF on iOS Safari, since Safari ignores the download attribute
-      // for file types (like PDF) it knows how to display itself.
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: currentPdfFilename });
-          return;
-        } catch (shareErr) {
-          if (shareErr && shareErr.name === 'AbortError') { return; } // user cancelled share sheet
-          // fall through to the plain download below on any other failure
-        }
-      }
-
-      // Fallback (desktop browsers / Android Chrome without file-share support):
-      // a plain download link.
-      var link = document.createElement('a');
-      link.href = currentPdfUrl;
-      link.download = currentPdfFilename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } finally {
-      saveBtn.disabled = false;
-      saveBtn.textContent = originalSaveLabel;
-    }
-  });
 
   document.getElementById('exportBtn').addEventListener('click', function () {
     generateAndDeliverPDF();
