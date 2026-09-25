@@ -336,13 +336,13 @@
   <div class="export-hint" id="exportHint">Shows a preview of the PDF, with Save / Share right there.</div>
 
   <button class="new-week-btn" id="newWeekBtn">Start New Week (clears saved entries)</button>
-  <div style="text-align:center; font-size:10px; color:#bbb; padding:10px 0 20px;">build 2026-09-19-r12-canvas-preview</div>
+  <div style="text-align:center; font-size:10px; color:#bbb; padding:10px 0 20px;">build 2026-09-25-r13-invoice-title</div>
 
 </div>
 
 <div class="pdf-modal" id="pdfModal">
   <div class="pdf-modal-bar">
-    <span class="pdf-modal-title">Weekly Payroll PDF</span>
+    <span class="pdf-modal-title">Invoice PDF</span>
     <div class="pdf-modal-actions">
       <button type="button" id="pdfSaveBtn">Save / Share</button>
       <button type="button" id="pdfCloseBtn">Close</button>
@@ -560,7 +560,7 @@
       doc.setFont('times', 'bold');
       doc.setFontSize(16);
       doc.setTextColor(10, 37, 64);
-      doc.text('WEEKLY PAYROLL \u2014 JMP BUILDERS LLC', 110, 52);
+      doc.text('INVOICE \u2014 JMP BUILDERS LLC', 110, 52);
 
       doc.setDrawColor(172, 116, 50);
       doc.setLineWidth(2);
